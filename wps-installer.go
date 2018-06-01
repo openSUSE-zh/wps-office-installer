@@ -210,32 +210,116 @@ func copydir(src, dst string) {
   }
 }
 
+func replace_binpath(p, binpath string) {
+  file, err := ioutil.ReadFile(p)
+  check_error(err)
+
+  fileinfo, err := os.Lstat(p)
+  check_error(err)
+
+  re := regexp.MustCompile("(?m)^gBinPath=.*?\n")
+  str := re.ReplaceAllString(string(file), "gBinPath=\"" + binpath + "\"\n")
+
+  err = ioutil.WriteFile(p, []byte(str), fileinfo.Mode())
+  check_error(err)
+}
+
+func find_files_by_ext(dir, ext string) []string {
+  var res []string
+  err := filepath.Walk(dir, func(p string, info os.FileInfo, e error) error {
+    if filepath.Ext(p) == ext {
+      res = append(res, p)
+    }
+    return nil
+  })
+  check_error(err)
+  return res
+}
+
 func main() {
   if os.Getuid() != 0 {
     panic("Must be root to exectuate this program")
   }
 
   wps_ver := "10.1.0.5707"
-  //wps_alpha := "a21"
+  wps_alpha := "a21"
   wps_arch := get_arch()
-  //wps_tar := "wps-office_" + wps_ver + "~" + wps_alpha + "_" + wps_arch + ".tar.xz"
-  //wps_url := "http://kdl1.cache.wps.com/kodl/download/linux/" + wps_alpha + "//" + wps_tar
-  //wps_tmp := "/tmp/"
+  wps_tar := "wps-office_" + wps_ver + "~" + wps_alpha + "_" + wps_arch + ".tar.xz"
+  wps_url := "http://kdl1.cache.wps.com/kodl/download/linux/" + wps_alpha + "//" + wps_tar
+  wps_tmp := "/tmp/"
   wps_dir := "wps-office_" + wps_ver + "_" + wps_arch
+  wps_prefix := wps_tmp + wps_dir
   wps_destdir := "/usr/share/wps-office"
-  //wps_fontdir := "/usr/share/fonts/wps-office"
+  wps_fontdir := "/usr/share/fonts/wps-office"
 
-  //if _, err := os.Stat(wps_tar); !os.IsNotExist(err) {
+  if _, err := os.Stat(wps_tmp + wps_tar); !os.IsNotExist(err) {
     log.Println("Downloading proprietary binary from WPS (100+ MB)...slow")
-  //  download(wps_url, wps_tmp + wps_tar)
+    download(wps_url, wps_tmp + wps_tar)
     log.Println("Done!")
-  //}
+  }
 
-  //unpack(wps_tar, wps_dir)//wps_tmp + wps_dir)
+  unpack(wps_tar, wps_prefix)
   createdir(wps_destdir)
-  rename_whitespace_in_dir(wps_dir)//wps_tmp + wps_dir)
+  rename_whitespace_in_dir(wps_prefix)
 
   log.Println("Copying files...Ultra slow...")
-  copydir("office6", wps_destdir + "/office6")
+  copydir(wps_prefix + "/office6", wps_destdir + "/office6")
 
+  // install binaries
+  binaries = [3]string{wps_prefix + "/et",
+                       wps_prefix + "/wps",
+		       wps_prefix + "/wpp"}
+
+  for _, file := range binaries {
+    replace_binpath(file)
+    copyfile(file, "/usr/bin/" + filepath.Base(file))
+  }
+
+  // install fonts
+  createdir(wps_fontdir)
+  fonts := find_files_by_ext(wps_prefix + "/fonts", ".TTF")
+
+  for _, font := range fonts {
+    copyfile(font, wps_fontdir + "/" + filepath.Base(font))
+  }
+
+  copyfile(wps_prefix + "/fontconfig/40-wps-office.conf", "/usr/share/fontconfig/conf.avail/40-wps-office.conf")
+
+  _, err = exec.Command("/usr/bin/fc-cache", "-f").Output()
+  check_error(err)
+
+  // install desktop files
+  desktops := find_files_by_ext(wps_prefix + "/resource/applications", ".desktop")
+
+  for _, d := range desktops {
+    copyfile(d, "/usr/share/applications/" + filepath.Base(d))
+  }
+
+  _, err = exec.Command("/usr/bin/update-desktop-database", "/usr/share/applications", "&>/dev/null").Output()
+  check_error(err)
+
+  // install icons
+  icons := find_files_by_ext(wps_prefix + "/resource/icons/hicolor", ".png")
+
+  for _, icon := range icons {
+    dest := strings.Replace(icon, wps_prefix + "/resource", "/usr/share", 1)
+    copyfile(icon, dest)
+  }
+
+  _, err = exec.Command("/usr/bin/gtk-update-icon-cache", "--quiet", "--force", "/usr/share/icons/hicolor")
+  check_error(err)
+
+  // install mimetypes
+  xmls := find_files_by_ext(wps_prefix + "/resource/mime/packages", ".xml")
+
+  for _, xml := range xmls {
+    copyfile(xml, "/usr/share/mime/packages/" + filepath.Base(xml))
+  }
+
+  _, err = exec.Command("/usr/bin/update-mime-database", "/usr/share/mime")
+  check_error(err)
+
+  os.RemoveAll(wps_prefix)
+
+  log.Println("Congratulations! Installation succeed!")
 }
