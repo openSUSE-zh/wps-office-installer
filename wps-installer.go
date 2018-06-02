@@ -136,8 +136,6 @@ func getDest(src, dst string) string {
 
 	if dstInfo.IsDir() {
 		getDest(src, filepath.Join(dst, filepath.Base(src)))
-	} else {
-		return dst
 	}
 
 	return dst
