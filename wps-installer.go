@@ -7,319 +7,321 @@
 package main
 
 import (
-  "io"
-  "io/ioutil"
-  "path"
-  "path/filepath"
-  "net/http"
-  "log"
-  "os"
-  "os/exec"
-  "regexp"
-  "runtime"
-  "strings"
-  "sort"
+	"io"
+	"io/ioutil"
+	"log"
+	"net/http"
+	"os"
+	"os/exec"
+	"path"
+	"path/filepath"
+	"regexp"
+	"runtime"
+	"sort"
+	"strings"
 )
 
-func get_arch() string {
-  if strings.HasSuffix(runtime.GOARCH, "64") {
-    return "x86_64"
-  } else {
-    return "x86"
-  }
+func getArch() string {
+	if strings.HasSuffix(runtime.GOARCH, "64") {
+		return "x86_64"
+	}
+	return "x86"
 }
 
-func check_error(e error) error {
-  if e != nil { return e }
-  return nil
+func checkError(e error) error {
+	if e != nil {
+		return e
+	}
+	return nil
 }
 
 func download(uri, path string) {
-  file, err := os.Create(path)
-  check_error(err)
-  defer file.Close()
+	file, err := os.Create(path)
+	checkError(err)
+	defer file.Close()
 
-  resp, err := http.Get(uri)
-  check_error(err)
-  defer resp.Body.Close()
+	resp, err := http.Get(uri)
+	checkError(err)
+	defer resp.Body.Close()
 
-  _, err = io.Copy(file, resp.Body)
-  check_error(err)
+	_, err = io.Copy(file, resp.Body)
+	checkError(err)
 
-  log.Println("downloaded " + uri + " to " + path)
+	log.Println("downloaded " + uri + " to " + path)
 }
 
-func createdir(dir string) {
-  if _, err := os.Stat(dir); os.IsNotExist(err) {
-    log.Println("Creating " + dir)
-    err = os.MkdirAll(dir, 0755)
-    check_error(err)
-  }
+func createDir(dir string) {
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		log.Println("Creating " + dir)
+		err = os.MkdirAll(dir, 0755)
+		checkError(err)
+	}
 }
 
-func unpack(tar, destdir string) {
-  log.Println("Unpacking...it'll take some time...")
-  createdir(destdir)
-  _, err := exec.Command("/usr/bin/tar", "-xf", tar, "--strip-components=1", "-C", destdir).Output()
-  check_error(err)
-  log.Println("Done!")
+func unpack(tar, destDir string) {
+	log.Println("Unpacking...it'll take some time...")
+	createDir(destDir)
+	_, err := exec.Command("/usr/bin/tar", "-xf", tar, "--strip-components=1", "-C", destDir).Output()
+	checkError(err)
+	log.Println("Done!")
 }
 
 type byLength []string
 
 func (s byLength) Len() int {
-  return len(s)
+	return len(s)
 }
 
 func (s byLength) Swap(i, j int) {
-  s[i], s[j] = s[j], s[i]
+	s[i], s[j] = s[j], s[i]
 }
 
 func (s byLength) Less(i, j int) bool {
-  return len(s[i]) < len(s[j])
+	return len(s[i]) < len(s[j])
 }
 
-func get_all_subdir(dir string) []string {
-  var dirs []string
-  err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-    if info.IsDir() {
-      dirs = append(dirs, path)
-    }
-    return nil
-  })
-  check_error(err)
-  sort.Sort(sort.Reverse(byLength(dirs)))
-  return dirs
+func getAllSubdir(dir string) []string {
+	var dirs []string
+	err := filepath.Walk(dir, func(p string, info os.FileInfo, err error) error {
+		if info.IsDir() {
+			dirs = append(dirs, p)
+		}
+		return nil
+	})
+	checkError(err)
+	sort.Sort(sort.Reverse(byLength(dirs)))
+	return dirs
 }
 
-func rename_whitespace_in_dir(dir string) {
-  dirs := get_all_subdir(dir)
-  re := regexp.MustCompile(`[[:space:]]`)
+func renameWhitespaceInDir(dir string) {
+	dirs := getAllSubdir(dir)
+	re := regexp.MustCompile(`[[:space:]]`)
 
-  for _, path := range dirs {
-    if re.MatchString(path) {
-      os.Rename(path, strings.Replace(path, " ", "_", -1))
-    }
-  }
+	for _, p := range dirs {
+		if re.MatchString(p) {
+			os.Rename(p, strings.Replace(p, " ", "_", -1))
+		}
+	}
 }
 
-func absolute_path(relative_path, parentdir string) string {
-  if strings.HasPrefix(relative_path, "/") {
-    return filepath.Clean(relative_path)
-  } else {
-    return filepath.Join(parentdir, relative_path)
-  }
+func absolutePath(relativePath, parentDir string) string {
+	if strings.HasPrefix(relativePath, "/") {
+		return filepath.Clean(relativePath)
+	}
+	return filepath.Join(parentDir, relativePath)
 }
 
-func parentdir(file string) string {
-  abspath, err := filepath.Abs(file)
-  check_error(err)
+func parentDir(file string) string {
+	absPath, err := filepath.Abs(file)
+	checkError(err)
 
-  return path.Dir(abspath)
+	return path.Dir(absPath)
 }
 
-func follow_symlink(file string) string {
-  var link string
-  dir := parentdir(file)
+func followSymlink(file string) string {
+	var link string
+	dir := parentDir(file)
 
-  link, err := filepath.EvalSymlinks(file)
-  check_error(err)
+	link, err := filepath.EvalSymlinks(file)
+	checkError(err)
 
-  return absolute_path(link, dir)
+	return absolutePath(link, dir)
 }
 
-func get_dest(src, dst string) string {
-  dst_info, err := os.Lstat(dst)
-  if err != nil { return dst }
+func getDest(src, dst string) string {
+	dstInfo, err := os.Lstat(dst)
+	if err != nil {
+		return dst
+	}
 
-  if dst_info.IsDir() {
-    get_dest(src, filepath.Join(dst, filepath.Base(src)))
-  } else {
-    return dst
-  }
+	if dstInfo.IsDir() {
+		getDest(src, filepath.Join(dst, filepath.Base(src)))
+	} else {
+		return dst
+	}
 
-  return dst
+	return dst
 }
 
-func copyfile(src, dst string) error {
-  si, err := os.Lstat(src)
-  check_error(err)
+func copyFile(src, dst string) error {
+	si, err := os.Lstat(src)
+	checkError(err)
 
-  dst = get_dest(src, dst)
-  if _, err = os.Lstat(dst); err == nil {
-    os.Remove(dst)
-  }
+	dst = getDest(src, dst)
+	if _, err = os.Lstat(dst); err == nil {
+		os.Remove(dst)
+	}
 
-  if si.Mode()&os.ModeSymlink != 0 {
-    orig := follow_symlink(src)
-    dst_parentdir := parentdir(dst)
-    os.Symlink(orig, absolute_path(dst, dst_parentdir))
-  } else {
-    in, err := os.Open(src)
-    check_error(err)
-    defer in.Close()
+	if si.Mode()&os.ModeSymlink != 0 {
+		orig := followSymlink(src)
+		dstParentDir := parentDir(dst)
+		os.Symlink(orig, absolutePath(dst, dstParentDir))
+	} else {
+		in, err := os.Open(src)
+		checkError(err)
+		defer in.Close()
 
-    out, err := os.Create(dst)
-    check_error(err)
-    defer func() {
-      if e := out.Close(); e != nil {
-        err = e
-      }
-    }()
+		out, err := os.Create(dst)
+		checkError(err)
+		defer func() {
+			if e := out.Close(); e != nil {
+				err = e
+			}
+		}()
 
-    _, err = io.Copy(out, in)
-    check_error(err)
+		_, err = io.Copy(out, in)
+		checkError(err)
 
-    err = out.Sync()
-    check_error(err)
+		err = out.Sync()
+		checkError(err)
 
-    err = os.Chmod(dst, si.Mode())
-    check_error(err)
-  }
+		err = os.Chmod(dst, si.Mode())
+		checkError(err)
+	}
 
-  return err
+	return err
 }
 
-func copydir(src, dst string) {
-  src_parentdir := parentdir(src)
-  dst_parentdir := parentdir(dst)
-  src = absolute_path(src, src_parentdir)
-  dst = get_dest(src, absolute_path(dst, dst_parentdir))
+func copyDir(src, dst string) {
+	srcParentDir := parentDir(src)
+	dstParentDir := parentDir(dst)
+	src = absolutePath(src, srcParentDir)
+	dst = getDest(src, absolutePath(dst, dstParentDir))
 
-  src_info, err := os.Stat(src)
-  check_error(err)
+	srcInfo, err := os.Stat(src)
+	checkError(err)
 
-  if src_info.IsDir() {
-    if _, err := os.Lstat(dst); err != nil {
-      os.MkdirAll(dst, src_info.Mode())
-    }
-    entries, err := ioutil.ReadDir(src)
-    check_error(err)
+	if srcInfo.IsDir() {
+		if _, err := os.Lstat(dst); err != nil {
+			os.MkdirAll(dst, srcInfo.Mode())
+		}
+		entries, err := ioutil.ReadDir(src)
+		checkError(err)
 
-    for _, entry := range entries {
-      srcpath := filepath.Join(src, entry.Name())
-      dstpath := filepath.Join(dst, entry.Name())
-      if entry.IsDir() {
-	copydir(srcpath, dstpath)
-      } else {
-        copyfile(srcpath, dstpath)
-      }
-    }
-  } else {
-    copyfile(src, dst)
-  }
+		for _, entry := range entries {
+			srcPath := filepath.Join(src, entry.Name())
+			dstPath := filepath.Join(dst, entry.Name())
+			if entry.IsDir() {
+				copyDir(srcPath, dstPath)
+			} else {
+				copyFile(srcPath, dstPath)
+			}
+		}
+	} else {
+		copyFile(src, dst)
+	}
 }
 
-func replace_binpath(p, binpath string) {
-  file, err := ioutil.ReadFile(p)
-  check_error(err)
+func replaceBinPath(p, binPath string) {
+	file, err := ioutil.ReadFile(p)
+	checkError(err)
 
-  fileinfo, err := os.Lstat(p)
-  check_error(err)
+	fileInfo, err := os.Lstat(p)
+	checkError(err)
 
-  re := regexp.MustCompile("(?m)^gBinPath=.*?\n")
-  str := re.ReplaceAllString(string(file), "gBinPath=\"" + binpath + "\"\n")
+	re := regexp.MustCompile("(?m)^gBinPath=.*?\n")
+	str := re.ReplaceAllString(string(file), "gBinPath=\""+binPath+"\"\n")
 
-  err = ioutil.WriteFile(p, []byte(str), fileinfo.Mode())
-  check_error(err)
+	err = ioutil.WriteFile(p, []byte(str), fileInfo.Mode())
+	checkError(err)
 }
 
-func find_files_by_ext(dir, ext string) []string {
-  var res []string
-  err := filepath.Walk(dir, func(p string, info os.FileInfo, e error) error {
-    if filepath.Ext(p) == ext {
-      res = append(res, p)
-    }
-    return nil
-  })
-  check_error(err)
-  return res
+func findFilesByExt(dir, ext string) []string {
+	var res []string
+	err := filepath.Walk(dir, func(p string, info os.FileInfo, e error) error {
+		if filepath.Ext(p) == ext {
+			res = append(res, p)
+		}
+		return nil
+	})
+	checkError(err)
+	return res
 }
 
 func main() {
-  if os.Getuid() != 0 {
-    panic("Must be root to exectuate this program")
-  }
+	if os.Getuid() != 0 {
+		panic("Must be root to exectuate this program")
+	}
 
-  wps_ver := "10.1.0.5707"
-  wps_alpha := "a21"
-  wps_arch := get_arch()
-  wps_tar := "wps-office_" + wps_ver + "~" + wps_alpha + "_" + wps_arch + ".tar.xz"
-  wps_url := "http://kdl1.cache.wps.com/kodl/download/linux/" + wps_alpha + "//" + wps_tar
-  wps_tmp := "/tmp/"
-  wps_dir := "wps-office_" + wps_ver + "_" + wps_arch
-  wps_prefix := wps_tmp + wps_dir
-  wps_destdir := "/usr/share/wps-office"
-  wps_fontdir := "/usr/share/fonts/wps-office"
+	wpsVer := "10.1.0.5707"
+	wpsAlpha := "a21"
+	wpsArch := getArch()
+	wpsTar := "wps-office_" + wpsVer + "~" + wpsAlpha + "_" + wpsArch + ".tar.xz"
+	wpsURL := "http://kdl1.cache.wps.com/kodl/download/linux/" + wpsAlpha + "//" + wpsTar
+	wpsTmp := "/tmp/"
+	wpsDir := "wps-office_" + wpsVer + "_" + wpsArch
+	wpsPrefix := wpsTmp + wpsDir
+	wpsDestDir := "/usr/share/wps-office"
+	wpsFontDir := "/usr/share/fonts/wps-office"
 
-  if _, err := os.Stat(wps_tmp + wps_tar); !os.IsNotExist(err) {
-    log.Println("Downloading proprietary binary from WPS (100+ MB)...slow")
-    download(wps_url, wps_tmp + wps_tar)
-    log.Println("Done!")
-  }
+	if _, err := os.Stat(wpsTmp + wpsTar); !os.IsNotExist(err) {
+		log.Println("Downloading proprietary binary from WPS (100+ MB)...slow")
+		download(wpsURL, wpsTmp+wpsTar)
+		log.Println("Done!")
+	}
 
-  unpack(wps_tar, wps_prefix)
-  createdir(wps_destdir)
-  rename_whitespace_in_dir(wps_prefix)
+	unpack(wpsTar, wpsPrefix)
+	createDir(wpsDestDir)
+	renameWhitespaceInDir(wpsPrefix)
 
-  log.Println("Copying files...Ultra slow...")
-  copydir(wps_prefix + "/office6", wps_destdir + "/office6")
+	log.Println("Copying files...Ultra slow...")
+	copyDir(wpsPrefix+"/office6", wpsDestDir+"/office6")
 
-  // install binaries
-  binaries = [3]string{wps_prefix + "/et",
-                       wps_prefix + "/wps",
-		       wps_prefix + "/wpp"}
+	// install binaries
+	binaries := [3]string{wpsPrefix + "/et",
+		wpsPrefix + "/wps",
+		wpsPrefix + "/wpp"}
 
-  for _, file := range binaries {
-    replace_binpath(file)
-    copyfile(file, "/usr/bin/" + filepath.Base(file))
-  }
+	for _, file := range binaries {
+		replaceBinPath(file, wpsDestDir)
+		copyFile(file, "/usr/bin/"+filepath.Base(file))
+	}
 
-  // install fonts
-  createdir(wps_fontdir)
-  fonts := find_files_by_ext(wps_prefix + "/fonts", ".TTF")
+	// install fonts
+	createDir(wpsFontDir)
+	fonts := findFilesByExt(wpsPrefix+"/fonts", ".TTF")
 
-  for _, font := range fonts {
-    copyfile(font, wps_fontdir + "/" + filepath.Base(font))
-  }
+	for _, font := range fonts {
+		copyFile(font, wpsFontDir+"/"+filepath.Base(font))
+	}
 
-  copyfile(wps_prefix + "/fontconfig/40-wps-office.conf", "/usr/share/fontconfig/conf.avail/40-wps-office.conf")
+	copyFile(wpsPrefix+"/fontconfig/40-wps-office.conf", "/usr/share/fontconfig/conf.avail/40-wps-office.conf")
 
-  _, err = exec.Command("/usr/bin/fc-cache", "-f").Output()
-  check_error(err)
+	_, err := exec.Command("/usr/bin/fc-cache", "-f").Output()
+	checkError(err)
 
-  // install desktop files
-  desktops := find_files_by_ext(wps_prefix + "/resource/applications", ".desktop")
+	// install desktop files
+	desktops := findFilesByExt(wpsPrefix+"/resource/applications", ".desktop")
 
-  for _, d := range desktops {
-    copyfile(d, "/usr/share/applications/" + filepath.Base(d))
-  }
+	for _, d := range desktops {
+		copyFile(d, "/usr/share/applications/"+filepath.Base(d))
+	}
 
-  _, err = exec.Command("/usr/bin/update-desktop-database", "/usr/share/applications", "&>/dev/null").Output()
-  check_error(err)
+	_, err = exec.Command("/usr/bin/update-desktop-database", "/usr/share/applications", "&>/dev/null").Output()
+	checkError(err)
 
-  // install icons
-  icons := find_files_by_ext(wps_prefix + "/resource/icons/hicolor", ".png")
+	// install icons
+	icons := findFilesByExt(wpsPrefix+"/resource/icons/hicolor", ".png")
 
-  for _, icon := range icons {
-    dest := strings.Replace(icon, wps_prefix + "/resource", "/usr/share", 1)
-    copyfile(icon, dest)
-  }
+	for _, icon := range icons {
+		dest := strings.Replace(icon, wpsPrefix+"/resource", "/usr/share", 1)
+		copyFile(icon, dest)
+	}
 
-  _, err = exec.Command("/usr/bin/gtk-update-icon-cache", "--quiet", "--force", "/usr/share/icons/hicolor")
-  check_error(err)
+	_, err = exec.Command("/usr/bin/gtk-update-icon-cache", "--quiet", "--force", "/usr/share/icons/hicolor").Output()
+	checkError(err)
 
-  // install mimetypes
-  xmls := find_files_by_ext(wps_prefix + "/resource/mime/packages", ".xml")
+	// install mimetypes
+	xmls := findFilesByExt(wpsPrefix+"/resource/mime/packages", ".xml")
 
-  for _, xml := range xmls {
-    copyfile(xml, "/usr/share/mime/packages/" + filepath.Base(xml))
-  }
+	for _, xml := range xmls {
+		copyFile(xml, "/usr/share/mime/packages/"+filepath.Base(xml))
+	}
 
-  _, err = exec.Command("/usr/bin/update-mime-database", "/usr/share/mime")
-  check_error(err)
+	_, err = exec.Command("/usr/bin/update-mime-database", "/usr/share/mime").Output()
+	checkError(err)
 
-  os.RemoveAll(wps_prefix)
+	os.RemoveAll(wpsPrefix)
 
-  log.Println("Congratulations! Installation succeed!")
+	log.Println("Congratulations! Installation succeed!")
 }
