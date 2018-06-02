@@ -97,9 +97,13 @@ func writeFile(files []string, dest string) {
 
 func main() {
 	var wpsDir string
-	flag.StringVar(&wpsDir, "wpsdir", "./wps-office_10.1.0.5707~a21_x86_64", "wps office directory")
+	flag.StringVar(&wpsDir, "wpsdir", "", "wps office directory")
 	flag.Parse()
-	log.Println(wpsDir)
+        if wpsDir == "" {
+                panic("You must specify the unpacked wps office dir with -wpsdir")
+        }
+
+        log.Println("wpsDir: " + wpsDir)
 
 	office6Dir := wpsDir + "/office6"
 	fontsDir := wpsDir + "/fonts"
