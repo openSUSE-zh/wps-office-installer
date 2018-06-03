@@ -137,7 +137,7 @@ func main() {
 		ghostOfficeFiles = append(ghostOfficeFiles, f)
 	}
 
-	dirs := [3]string{"%{_datadir}/wps-office", "%{_datadir}/wps-office/office6", "%{_datadir}/fonts/wps-office"}
+	dirs := [3]string{"%dir %{_datadir}/wps-office", "%dir %{_datadir}/wps-office/office6", "%dir %{_datadir}/fonts/wps-office"}
 
 	for _, f := range dirs {
 		ghostOfficeFiles = append(ghostOfficeFiles, f)
