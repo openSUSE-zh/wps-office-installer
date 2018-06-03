@@ -92,30 +92,30 @@ func findRawDepends(file string, depends []string, wpsDir string, selfBinaries [
 }
 
 func findDepends(files []string) []string {
-  var depends []string
-  for _, f := range files {
-    cmd, err := exec.Command("/usr/bin/zypper", "se", "-f", f).Output()
-    if err != nil {
-      re := regexp.MustCompile(`(.*?)(\d+)?\.so\.(\d+)`)
-      matches := re.FindStringSubmatch(f)
-      var res string
-      if len(matches) > 4 {
-	res = strings.Replace(f, ".so.", "-", -1)
-	res = strings.Replace(res, ".", "_", -1)
-      } else {
-        res = strings.Replace(f, ".so.", "", -1)
-      }
-      log.Println(f + " probably resolves to " + res + ", but we couldn't be sure since that package isn't installed. do your own research!")
-      continue
-    }
+	var depends []string
+	for _, f := range files {
+		cmd, err := exec.Command("/usr/bin/zypper", "se", "-f", f).Output()
+		if err != nil {
+			re := regexp.MustCompile(`(.*?)(\d+)?\.so\.(\d+)`)
+			matches := re.FindStringSubmatch(f)
+			var res string
+			if len(matches) > 4 {
+				res = strings.Replace(f, ".so.", "-", -1)
+				res = strings.Replace(res, ".", "_", -1)
+			} else {
+				res = strings.Replace(f, ".so.", "", -1)
+			}
+			log.Println(f + " probably resolves to " + res + ", but we couldn't be sure since that package isn't installed. do your own research!")
+			continue
+		}
 
-    out := strings.Split(string(cmd), "|")
-    d := strings.Replace(out[len(out) - 3], " ", "", -1)
-    if !contains(d, depends) {
-      depends = append(depends, d)
-    }
-  }
-  return depends
+		out := strings.Split(string(cmd), "|")
+		d := strings.Replace(out[len(out)-3], " ", "", -1)
+		if !contains(d, depends) {
+			depends = append(depends, d)
+		}
+	}
+	return depends
 }
 
 func writeFile(files []string, dest string) {
@@ -161,5 +161,5 @@ func main() {
 	log.Println("Resolving dependencies to package names...")
 	depends := findDepends(rawDepends)
 
-        writeFile(depends, "depends.txt")
+	writeFile(depends, "depends.txt")
 }

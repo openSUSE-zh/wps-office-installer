@@ -18,7 +18,9 @@ import (
 	"regexp"
 	"runtime"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 )
 
 func getArch() string {
@@ -28,11 +30,49 @@ func getArch() string {
 	return "x86"
 }
 
-func checkError(e error) error {
+func checkError(e error) {
 	if e != nil {
-		return e
+		panic(e)
 	}
-	return nil
+}
+
+func printDownloadPercent(done chan int64, path string, total int64) {
+
+	stop := false
+
+	for {
+		select {
+		case <-done:
+			stop = true
+		default:
+
+			file, err := os.Open(path)
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			fi, err := file.Stat()
+			if err != nil {
+				log.Fatal(err)
+			}
+
+			size := fi.Size()
+
+			if size == 0 {
+				size = 1
+			}
+
+			percent := float64(size) / float64(total) * 100
+
+			log.Printf("%.0f%%", percent)
+		}
+
+		if stop {
+			break
+		}
+
+		time.Sleep(time.Second)
+	}
 }
 
 func download(uri, path string) {
@@ -40,14 +80,31 @@ func download(uri, path string) {
 	checkError(err)
 	defer file.Close()
 
+	start := time.Now()
+	head, err := http.Head(uri)
+	checkError(err)
+	defer head.Body.Close()
+	size, err := strconv.Atoi(head.Header.Get("Content-Length"))
+	checkError(err)
+
+	done := make(chan int64)
+
+	go printDownloadPercent(done, path, int64(size))
+
 	resp, err := http.Get(uri)
 	checkError(err)
 	defer resp.Body.Close()
 
-	_, err = io.Copy(file, resp.Body)
+	if resp.StatusCode == 404 {
+		panic("File not found: " + uri)
+	}
+
+	n, err := io.Copy(file, resp.Body)
 	checkError(err)
 
-	log.Println("downloaded " + uri + " to " + path)
+	done <- n
+	elapsed := time.Since(start)
+	log.Printf("downloaded "+uri+" to "+path+" in %s", elapsed)
 }
 
 func createDir(dir string) {
@@ -118,14 +175,17 @@ func parentDir(file string) string {
 	return path.Dir(absPath)
 }
 
-func followSymlink(file string) string {
+func followSymlink(file string) (string, int) {
 	var link string
 	dir := parentDir(file)
 
 	link, err := filepath.EvalSymlinks(file)
 	checkError(err)
 
-	return absolutePath(link, dir)
+	re := regexp.MustCompile(`\.\.`)
+	matches := re.FindStringSubmatch(link)
+
+	return absolutePath(link, dir), len(matches)
 }
 
 func getDest(src, dst string) string {
@@ -141,7 +201,22 @@ func getDest(src, dst string) string {
 	return dst
 }
 
-func copyFile(src, dst string) error {
+func findOrigDir(dst string, num int) string {
+	if num == 0 {
+		return dst
+	}
+	var dir string
+	for i := 0; i < num; i++ {
+		dir = parentDir(dst)
+	}
+	return dir
+}
+
+func findOrigDest(orig, dir string) string {
+	return filepath.Join(dir, filepath.Base(orig))
+}
+
+func copyFile(src, dst string) {
 	si, err := os.Lstat(src)
 	checkError(err)
 
@@ -151,9 +226,14 @@ func copyFile(src, dst string) error {
 	}
 
 	if si.Mode()&os.ModeSymlink != 0 {
-		orig := followSymlink(src)
+		orig, num := followSymlink(src)
 		dstParentDir := parentDir(dst)
-		os.Symlink(orig, absolutePath(dst, dstParentDir))
+		origDir := findOrigDir(dstParentDir, num)
+		origDest := findOrigDest(orig, origDir)
+		if _, err := os.Stat(origDest); os.IsNotExist(err) {
+			copyFile(orig, origDest)
+		}
+		os.Symlink(origDest, absolutePath(dst, dstParentDir))
 	} else {
 		in, err := os.Open(src)
 		checkError(err)
@@ -176,8 +256,6 @@ func copyFile(src, dst string) error {
 		err = os.Chmod(dst, si.Mode())
 		checkError(err)
 	}
-
-	return err
 }
 
 func copyDir(src, dst string) {
@@ -245,20 +323,20 @@ func main() {
 	wpsAlpha := "a21"
 	wpsArch := getArch()
 	wpsTar := "wps-office_" + wpsVer + "~" + wpsAlpha + "_" + wpsArch + ".tar.xz"
-	wpsURL := "http://kdl1.cache.wps.com/kodl/download/linux/" + wpsAlpha + "//" + wpsTar
+	wpsURL := "http://kdl1.cache.wps.com/ksodl/download/linux/" + wpsAlpha + "//" + wpsTar
 	wpsTmp := "/tmp/"
 	wpsDir := "wps-office_" + wpsVer + "_" + wpsArch
 	wpsPrefix := wpsTmp + wpsDir
 	wpsDestDir := "/usr/share/wps-office"
 	wpsFontDir := "/usr/share/fonts/wps-office"
 
-	if _, err := os.Stat(wpsTmp + wpsTar); !os.IsNotExist(err) {
+	if _, err := os.Stat(wpsTmp + wpsTar); os.IsNotExist(err) {
 		log.Println("Downloading proprietary binary from WPS (100+ MB)...slow")
 		download(wpsURL, wpsTmp+wpsTar)
 		log.Println("Done!")
 	}
 
-	unpack(wpsTar, wpsPrefix)
+	unpack(wpsTmp+wpsTar, wpsPrefix)
 	createDir(wpsDestDir)
 	renameWhitespaceInDir(wpsPrefix)
 
