@@ -4,6 +4,7 @@ import (
 	"flag"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -49,9 +50,20 @@ func renameWhitespaceInDir(dir string) {
 
 	for _, p := range dirs {
 		if re.MatchString(p) {
-			os.Rename(p, strings.Replace(p, " ", "_", -1))
+			os.Rename(p, path.Dir(p)+"/"+strings.Replace(filepath.Base(p), " ", "_", -1))
 		}
 	}
+}
+
+func renameWhitespaceInFiles(dir string) {
+	re := regexp.MustCompile(`[[:space:]]`)
+	err := filepath.Walk(dir, func(p string, i os.FileInfo, e error) error {
+		if !i.IsDir() && re.MatchString(p) {
+			os.Rename(p, strings.Replace(p, " ", "_", -1))
+		}
+		return nil
+	})
+	checkError(err)
 }
 
 func getDirsAndFiles(dir string) ([]string, []string) {
@@ -99,15 +111,16 @@ func main() {
 	var wpsDir string
 	flag.StringVar(&wpsDir, "wpsdir", "", "wps office directory")
 	flag.Parse()
-        if wpsDir == "" {
-                panic("You must specify the unpacked wps office dir with -wpsdir")
-        }
+	if wpsDir == "" {
+		panic("You must specify the unpacked wps office dir with -wpsdir")
+	}
 
-        log.Println("wpsDir: " + wpsDir)
+	log.Println("wpsDir: " + wpsDir)
 
 	office6Dir := wpsDir + "/office6"
 	fontsDir := wpsDir + "/fonts"
 	renameWhitespaceInDir(office6Dir)
+	renameWhitespaceInFiles(office6Dir)
 	officeDirs, officeFiles := getDirsAndFiles(office6Dir)
 	_, fontFiles := getDirsAndFiles(fontsDir)
 

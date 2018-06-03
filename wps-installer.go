@@ -156,9 +156,20 @@ func renameWhitespaceInDir(dir string) {
 
 	for _, p := range dirs {
 		if re.MatchString(p) {
-			os.Rename(p, strings.Replace(p, " ", "_", -1))
+			os.Rename(p, path.Dir(p)+"/"+strings.Replace(filepath.Base(p), " ", "_", -1))
 		}
 	}
+}
+
+func renameWhitespaceInFiles(dir string) {
+	re := regexp.MustCompile(`[[:space:]]`)
+	err := filepath.Walk(dir, func(p string, i os.FileInfo, e error) error {
+		if !i.IsDir() && re.MatchString(p) {
+			os.Rename(p, strings.Replace(p, " ", "_", -1))
+		}
+		return nil
+	})
+	checkError(err)
 }
 
 func absolutePath(relativePath, parentDir string) string {
@@ -339,6 +350,7 @@ func main() {
 	unpack(wpsTmp+wpsTar, wpsPrefix)
 	createDir(wpsDestDir)
 	renameWhitespaceInDir(wpsPrefix)
+	renameWhitespaceInFiles(wpsPrefix)
 
 	log.Println("Copying files...Ultra slow...")
 	copyDir(wpsPrefix+"/office6", wpsDestDir+"/office6")
