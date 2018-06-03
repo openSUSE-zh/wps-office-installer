@@ -126,7 +126,7 @@ func main() {
 
 	ghostOfficeDirs := substitute(officeDirs, wpsDir, "%dir %{_datadir}/wps-office")
 	ghostOfficeFiles := substitute(officeFiles, wpsDir, "%ghost %{_datadir}/wps-office")
-	ghostFontFiles := substitute(fontFiles, wpsDir, "%ghost %{_datadir}/fonts/wps-office")
+	ghostFontFiles := substitute(fontFiles, fontsDir, "%ghost %{_datadir}/fonts/wps-office")
 	officeDirs = substitute(officeDirs, wpsDir, "./usr/share/wps-office")
 
 	for _, f := range ghostFontFiles {
