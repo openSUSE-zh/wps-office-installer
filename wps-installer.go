@@ -330,11 +330,12 @@ func main() {
 		panic("Must be root to exectuate this program")
 	}
 
-	wpsVer := "10.1.0.5707"
-	wpsAlpha := "a21"
+	wpsVer := "10.1.0.6634"
+	//wpsAlpha := "a21"
 	wpsArch := getArch()
-	wpsTar := "wps-office_" + wpsVer + "~" + wpsAlpha + "_" + wpsArch + ".tar.xz"
-	wpsURL := "http://kdl1.cache.wps.com/ksodl/download/linux/" + wpsAlpha + "//" + wpsTar
+	// http://kdl.cc.ksosoft.com/wps-community/download/6634/wps-office_10.1.0.6634_x86_64.tar.xz
+	wpsTar := "wps-office_" + wpsVer + "_" + wpsArch + ".tar.xz"
+	wpsURL := "http://kdl.cc.ksosoft.com/wps-community/download/6634/" + wpsTar
 	wpsTmp := "/tmp/"
 	wpsDir := "wps-office_" + wpsVer + "_" + wpsArch
 	wpsPrefix := wpsTmp + wpsDir
@@ -408,6 +409,21 @@ func main() {
 
 	_, err = exec.Command("/usr/bin/update-mime-database", "/usr/share/mime").Output()
 	checkError(err)
+
+        // install desktop-directories
+	createDir("/usr/share/desktop-directories")
+        dirs := findFilesByExt(wpsPrefix+"/resource/desktop-directories", ".directory")
+	for _, d := range dirs {
+		copyFile(d, "/usr/share/desktop-directories/"+filepath.Base(d))
+	}
+
+	// install templates
+	createDir("/usr/share/templates")
+	createDir("/usr/share/templates/.source")
+	templates := findFilesByExt(wpsPrefix+"/resource/templates", ".desktop")
+	for _, t := range templates {
+		copyFile(t, "/usr/share/templates/"+filepath.Base(t))
+	}
 
 	os.RemoveAll(wpsPrefix)
 
