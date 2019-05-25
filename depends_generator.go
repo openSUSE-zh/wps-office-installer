@@ -24,9 +24,13 @@ func findBinaryData(dir string) []string {
 		pInfo, err := os.Stat(p)
 		checkError(err)
 		// skip zero-bit file
-                if pInfo.Size() == 0 { return nil }
+		if pInfo.Size() == 0 {
+			return nil
+		}
 		// skip non-execuatable file
-		if !strings.Contains(pInfo.Mode().String(), "x") { return nil }
+		if !strings.Contains(pInfo.Mode().String(), "x") {
+			return nil
+		}
 
 		if !i.IsDir() {
 			if !(pInfo.Mode()&os.ModeSymlink != 0) {
@@ -151,7 +155,7 @@ func main() {
 
 	log.Println("wpsDir: " + wpsDir)
 
-	office6Dir := wpsDir + "/office6"
+	office6Dir := wpsDir + "/opt/kingsoft/wps-office/office6"
 
 	log.Println("Finding all the bianry data from " + office6Dir)
 

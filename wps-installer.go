@@ -1,5 +1,5 @@
 // Name: WPS Installer for openSUSE
-// Version: 2.0.0
+// Version: 3.0.0
 // Description: Install WPS Office onto your openSUSE Box
 // Author: Marguerite Su <marguerite@opensuse.org>
 // License: GPL-3.0-and-later
@@ -27,7 +27,7 @@ func getArch() string {
 	if strings.HasSuffix(runtime.GOARCH, "64") {
 		return "x86_64"
 	}
-	return "x86"
+	return "i686"
 }
 
 func checkError(e error) {
@@ -96,7 +96,7 @@ func download(uri, path string) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode == 404 {
-		panic("File not found: " + uri)
+		log.Fatal("File not found: " + uri)
 	}
 
 	n, err := io.Copy(file, resp.Body)
@@ -117,9 +117,11 @@ func createDir(dir string) {
 
 func unpack(tar, destDir string) {
 	log.Println("Unpacking...it'll take some time...")
-	createDir(destDir)
-	_, err := exec.Command("/usr/bin/tar", "-xf", tar, "--strip-components=1", "-C", destDir).Output()
+	pwd, _ := os.Getwd()
+	os.Chdir(destDir)
+	_, err := exec.Command("/usr/bin/unrpm", filepath.Base(tar)).Output()
 	checkError(err)
+	os.Chdir(pwd)
 	log.Println("Done!")
 }
 
@@ -330,36 +332,38 @@ func main() {
 		panic("Must be root to exectuate this program")
 	}
 
-	wpsVer := "10.1.0.6634"
+	wpsVer := "11.1.0.8392-1"
 	//wpsAlpha := "a21"
 	wpsArch := getArch()
-	// http://kdl.cc.ksosoft.com/wps-community/download/6634/wps-office_10.1.0.6634_x86_64.tar.xz
-	wpsTar := "wps-office_" + wpsVer + "_" + wpsArch + ".tar.xz"
-	wpsURL := "http://kdl.cc.ksosoft.com/wps-community/download/6634/" + wpsTar
+	// https://wdl1.cache.wps.cn/wps/download/ep/Linux2019/8392/wps-office-11.1.0.8392-1.x86_64.rpm
+	wpsTar := "wps-office_" + wpsVer + "." + wpsArch + ".rpm"
+	wpsURL := "https://wdl1.cache.wps.cn/wps/download/ep/Linux2019/8392/" + wpsTar
 	wpsTmp := "/tmp/"
 	wpsDir := "wps-office_" + wpsVer + "_" + wpsArch
 	wpsPrefix := wpsTmp + wpsDir
 	wpsDestDir := "/usr/share/wps-office"
-	wpsFontDir := "/usr/share/fonts/wps-office"
+	//wpsFontDir := "/usr/share/fonts/wps-office"
 
-	if _, err := os.Stat(wpsTmp + wpsTar); os.IsNotExist(err) {
+	createDir(wpsPrefix)
+
+	if _, err := os.Stat(wpsPrefix + wpsTar); os.IsNotExist(err) {
 		log.Println("Downloading proprietary binary from WPS (100+ MB)...slow")
-		download(wpsURL, wpsTmp+wpsTar)
+		download(wpsURL, wpsPrefix+wpsTar)
 		log.Println("Done!")
 	}
 
-	unpack(wpsTmp+wpsTar, wpsPrefix)
+	unpack(wpsPrefix+wpsTar, wpsPrefix)
 	createDir(wpsDestDir)
 	renameWhitespaceInDir(wpsPrefix)
 	renameWhitespaceInFiles(wpsPrefix)
 
 	log.Println("Copying files...Ultra slow...")
-	copyDir(wpsPrefix+"/office6", wpsDestDir+"/office6")
+	copyDir(wpsPrefix+"/opt/office6", wpsDestDir+"/office6")
 
 	// install binaries
-	binaries := [3]string{wpsPrefix + "/et",
-		wpsPrefix + "/wps",
-		wpsPrefix + "/wpp"}
+	binaries := [3]string{wpsPrefix + "/usr/bin/et",
+		wpsPrefix + "/usr/bin/wps",
+		wpsPrefix + "/usr/bin/wpp"}
 
 	for _, file := range binaries {
 		replaceBinPath(file, wpsDestDir)
@@ -367,20 +371,20 @@ func main() {
 	}
 
 	// install fonts
-	createDir(wpsFontDir)
-	fonts := findFilesByExt(wpsPrefix+"/fonts", ".TTF")
+	//createDir(wpsFontDir)
+	//fonts := findFilesByExt(wpsPrefix+"/fonts", ".TTF")
 
-	for _, font := range fonts {
-		copyFile(font, wpsFontDir+"/"+filepath.Base(font))
-	}
+	//for _, font := range fonts {
+	//	copyFile(font, wpsFontDir+"/"+filepath.Base(font))
+	//}
 
-	copyFile(wpsPrefix+"/fontconfig/40-wps-office.conf", "/usr/share/fontconfig/conf.avail/40-wps-office.conf")
+	//copyFile(wpsPrefix+"/fontconfig/40-wps-office.conf", "/usr/share/fontconfig/conf.avail/40-wps-office.conf")
 
-	_, err := exec.Command("/usr/bin/fc-cache", "-f").Output()
-	checkError(err)
+	//_, err := exec.Command("/usr/bin/fc-cache", "-f").Output()
+	//checkError(err)
 
 	// install desktop files
-	desktops := findFilesByExt(wpsPrefix+"/resource/applications", ".desktop")
+	desktops := findFilesByExt(wpsPrefix+"/usr/share/applications", ".desktop")
 
 	for _, d := range desktops {
 		copyFile(d, "/usr/share/applications/"+filepath.Base(d))
@@ -390,10 +394,10 @@ func main() {
 	checkError(err)
 
 	// install icons
-	icons := findFilesByExt(wpsPrefix+"/resource/icons/hicolor", ".png")
+	icons := findFilesByExt(wpsPrefix+"/usr/share/icons/hicolor", ".png")
 
 	for _, icon := range icons {
-		dest := strings.Replace(icon, wpsPrefix+"/resource", "/usr/share", 1)
+		dest := strings.Replace(icon, wpsPrefix, "", 1)
 		copyFile(icon, dest)
 	}
 
@@ -401,7 +405,7 @@ func main() {
 	checkError(err)
 
 	// install mimetypes
-	xmls := findFilesByExt(wpsPrefix+"/resource/mime/packages", ".xml")
+	xmls := findFilesByExt(wpsPrefix+"/usr/share/mime/packages", ".xml")
 
 	for _, xml := range xmls {
 		copyFile(xml, "/usr/share/mime/packages/"+filepath.Base(xml))
@@ -410,9 +414,9 @@ func main() {
 	_, err = exec.Command("/usr/bin/update-mime-database", "/usr/share/mime").Output()
 	checkError(err)
 
-        // install desktop-directories
+	// install desktop-directories
 	createDir("/usr/share/desktop-directories")
-        dirs := findFilesByExt(wpsPrefix+"/resource/desktop-directories", ".directory")
+	dirs := findFilesByExt(wpsPrefix+"/usr/share/desktop-directories", ".directory")
 	for _, d := range dirs {
 		copyFile(d, "/usr/share/desktop-directories/"+filepath.Base(d))
 	}
@@ -420,10 +424,14 @@ func main() {
 	// install templates
 	createDir("/usr/share/templates")
 	createDir("/usr/share/templates/.source")
-	templates := findFilesByExt(wpsPrefix+"/resource/templates", ".desktop")
+	templates := findFilesByExt(wpsPrefix+"/usr/share/templates", ".desktop")
 	for _, t := range templates {
 		copyFile(t, "/usr/share/templates/"+filepath.Base(t))
 	}
+
+	// install menus
+	createDir("/etc/xdg/menus/applications-merged")
+	copyFile(wpsPrefix+"/etc/xdg/menus/applications-merged/wps-office.menu", "/etc/xdg/menus/applications-merged/wps-office.menu")
 
 	os.RemoveAll(wpsPrefix)
 

@@ -117,33 +117,33 @@ func main() {
 
 	log.Println("wpsDir: " + wpsDir)
 
-	office6Dir := wpsDir + "/office6"
-	fontsDir := wpsDir + "/fonts"
+	office6Dir := wpsDir + "/opt/kingsoft/wps-office/office6"
+	//fontsDir := wpsDir + "/fonts"
 	renameWhitespaceInDir(office6Dir)
 	renameWhitespaceInFiles(office6Dir)
 	officeDirs, officeFiles := getDirsAndFiles(office6Dir)
-	_, fontFiles := getDirsAndFiles(fontsDir)
+	//_, fontFiles := getDirsAndFiles(fontsDir)
 
-	ghostOfficeDirs := substitute(officeDirs, wpsDir, "%dir %{_datadir}/wps-office")
-	ghostOfficeFiles := substitute(officeFiles, wpsDir, "%ghost %{_datadir}/wps-office")
-	ghostFontFiles := substitute(fontFiles, fontsDir, "%ghost %{_datadir}/fonts/wps-office")
-	officeDirs = substitute(officeDirs, wpsDir, "./usr/share/wps-office")
+	ghostOfficeDirs := substitute(officeDirs, filepath.Dir(office6Dir), "%dir %{_datadir}/wps-office")
+	ghostOfficeFiles := substitute(officeFiles, filepath.Dir(office6Dir), "%ghost %{_datadir}/wps-office")
+	//ghostFontFiles := substitute(fontFiles, fontsDir, "%ghost %{_datadir}/fonts/wps-office")
+	officeDirs = substitute(officeDirs, filepath.Dir(office6Dir), "./usr/share/wps-office")
 
-	for _, f := range ghostFontFiles {
-		ghostOfficeFiles = append(ghostOfficeFiles, f)
-	}
+	//for _, f := range ghostFontFiles {
+	//	ghostOfficeFiles = append(ghostOfficeFiles, f)
+	//}
 
 	for _, f := range ghostOfficeDirs {
 		ghostOfficeFiles = append(ghostOfficeFiles, f)
 	}
 
-	dirs := [3]string{"%dir %{_datadir}/wps-office", "%dir %{_datadir}/wps-office/office6", "%dir %{_datadir}/fonts/wps-office"}
+	dirs := [2]string{"%dir %{_datadir}/wps-office", "%dir %{_datadir}/wps-office/office6"}
 
 	for _, f := range dirs {
 		ghostOfficeFiles = append(ghostOfficeFiles, f)
 	}
 
-	officeDirs = append(officeDirs, "./usr/share/fonts/wps-office")
+	//officeDirs = append(officeDirs, "./usr/share/fonts/wps-office")
 
 	writeFile(ghostOfficeFiles, "./ghostfiles.txt")
 	writeFile(officeDirs, "./wps-dir.txt")
