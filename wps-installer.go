@@ -344,32 +344,32 @@ func main() {
 	wpsDestDir := "/usr/share/wps-office"
 	//wpsFontDir := "/usr/share/fonts/wps-office"
 
-  if _, err := os.Stat(wpsTmp + "/wps-office-" + wpsVer + ".txt"); err == nil {
-    log.Printf("Already installed wps-office %s, skipped.", wpsVer)
-    os.Exit(0)
-  }
+	if _, err := os.Stat(wpsTmp + "/wps-office-" + wpsVer + ".txt"); err == nil {
+		log.Printf("Already installed wps-office %s, skipped.", wpsVer)
+		os.Exit(0)
+	}
 
-  // delete all verioned text files
-  m, _ := filepath.Glob(wpsTmp+"wps-office*.txt")
-  for _, i := range m {
-    os.Remove(i)
-  }
+	// delete all verioned text files
+	m, _ := filepath.Glob(wpsTmp + "wps-office*.txt")
+	for _, i := range m {
+		os.Remove(i)
+	}
 
 	createDir(wpsPrefix)
 
-	if _, err := os.Stat(filepath.Join(wpsPrefix,wpsTar)); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(wpsPrefix, wpsTar)); os.IsNotExist(err) {
 		log.Println("Downloading proprietary binary from WPS (100+ MB)...slow")
-		download(wpsURL, filepath.Join(wpsPrefix,wpsTar))
+		download(wpsURL, filepath.Join(wpsPrefix, wpsTar))
 		log.Println("Done!")
 	}
 
-	unpack(filepath.Join(wpsPrefix,wpsTar), wpsPrefix)
+	unpack(filepath.Join(wpsPrefix, wpsTar), wpsPrefix)
 	createDir(wpsDestDir)
 	renameWhitespaceInDir(wpsPrefix)
 	renameWhitespaceInFiles(wpsPrefix)
 
 	log.Println("Copying files...Ultra slow...")
-	copyDir(wpsPrefix+"/opt/kingsoft/office6", wpsDestDir+"/office6")
+	copyDir(wpsPrefix+"/opt/kingsoft/wps-office/office6", wpsDestDir+"/office6")
 
 	// install binaries
 	binaries := [3]string{wpsPrefix + "/usr/bin/et",
@@ -446,10 +446,10 @@ func main() {
 
 	os.RemoveAll(wpsPrefix)
 
-  _, err = os.Create(wpsTmp + "/wps-office-" + wpsVer + ".txt")
-  if err != nil {
-    log.Fatalf("Can not create %s.", wpsTmp+"/wps-office-"+wpsVer+".txt")
-  }
+	_, err = os.Create(wpsTmp + "/wps-office-" + wpsVer + ".txt")
+	if err != nil {
+		log.Fatalf("Can not create %s.", wpsTmp+"/wps-office-"+wpsVer+".txt")
+	}
 
 	log.Println("Congratulations! Installation succeed!")
 }
