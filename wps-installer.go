@@ -329,14 +329,14 @@ func findFilesByExt(dir, ext string) []string {
 
 func main() {
 	if os.Getuid() != 0 {
-		panic("Must be root to exectuate this program")
+		log.Fatal("Must be root to exectuate this program")
 	}
 
 	wpsVer := "11.1.0.8392-1"
 	//wpsAlpha := "a21"
 	wpsArch := getArch()
 	// https://wdl1.cache.wps.cn/wps/download/ep/Linux2019/8392/wps-office-11.1.0.8392-1.x86_64.rpm
-	wpsTar := "wps-office_" + wpsVer + "." + wpsArch + ".rpm"
+	wpsTar := "wps-office-" + wpsVer + "." + wpsArch + ".rpm"
 	wpsURL := "https://wdl1.cache.wps.cn/wps/download/ep/Linux2019/8392/" + wpsTar
 	wpsTmp := "/tmp/"
 	wpsDir := "wps-office_" + wpsVer + "_" + wpsArch
@@ -344,21 +344,32 @@ func main() {
 	wpsDestDir := "/usr/share/wps-office"
 	//wpsFontDir := "/usr/share/fonts/wps-office"
 
+  if _, err := os.Stat(wpsTmp + "/wps-office-" + wpsVer + ".txt"); err == nil {
+    log.Printf("Already installed wps-office %s, skipped.", wpsVer)
+    os.Exit(0)
+  }
+
+  // delete all verioned text files
+  m, _ := filepath.Glob(wpsTmp+"wps-office*.txt")
+  for _, i := range m {
+    os.Remove(i)
+  }
+
 	createDir(wpsPrefix)
 
-	if _, err := os.Stat(wpsPrefix + wpsTar); os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(wpsPrefix,wpsTar)); os.IsNotExist(err) {
 		log.Println("Downloading proprietary binary from WPS (100+ MB)...slow")
-		download(wpsURL, wpsPrefix+wpsTar)
+		download(wpsURL, filepath.Join(wpsPrefix,wpsTar))
 		log.Println("Done!")
 	}
 
-	unpack(wpsPrefix+wpsTar, wpsPrefix)
+	unpack(filepath.Join(wpsPrefix,wpsTar), wpsPrefix)
 	createDir(wpsDestDir)
 	renameWhitespaceInDir(wpsPrefix)
 	renameWhitespaceInFiles(wpsPrefix)
 
 	log.Println("Copying files...Ultra slow...")
-	copyDir(wpsPrefix+"/opt/office6", wpsDestDir+"/office6")
+	copyDir(wpsPrefix+"/opt/kingsoft/office6", wpsDestDir+"/office6")
 
 	// install binaries
 	binaries := [3]string{wpsPrefix + "/usr/bin/et",
@@ -390,7 +401,7 @@ func main() {
 		copyFile(d, "/usr/share/applications/"+filepath.Base(d))
 	}
 
-	_, err = exec.Command("/usr/bin/update-desktop-database", "/usr/share/applications", "&>/dev/null").Output()
+	_, err := exec.Command("/usr/bin/update-desktop-database", "/usr/share/applications", "&>/dev/null").Output()
 	checkError(err)
 
 	// install icons
@@ -434,6 +445,11 @@ func main() {
 	copyFile(wpsPrefix+"/etc/xdg/menus/applications-merged/wps-office.menu", "/etc/xdg/menus/applications-merged/wps-office.menu")
 
 	os.RemoveAll(wpsPrefix)
+
+  _, err = os.Create(wpsTmp + "/wps-office-" + wpsVer + ".txt")
+  if err != nil {
+    log.Fatalf("Can not create %s.", wpsTmp+"/wps-office-"+wpsVer+".txt")
+  }
 
 	log.Println("Congratulations! Installation succeed!")
 }
