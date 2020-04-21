@@ -167,9 +167,16 @@ func main() {
 		}
 
 		// delete all versioned indicators
-		indicators, _ := dir.Glob("/tmp", "wps-office*.txt")
+		indicators, _ := dir.Glob("/tmp", "^/tmp/wps-office-.*\\.txt$")
 		for _, indicator := range indicators {
 			os.Remove(indicator)
+		}
+
+		for _, d := range []string{filepath.Join(dest, "office6"), "/usr/share/templates/.source", "/etc/xdg/menus/applications-merged"} {
+			if _, err := os.Stat(d); !os.IsNotExist(err) {
+				os.RemoveAll(d)
+			}
+			dir.MkdirP(d)
 		}
 
 		dir.MkdirP(prefix)
@@ -189,10 +196,6 @@ func main() {
 			fmt.Println(err)
 			os.Exit(1)
 		}
-
-		dir.MkdirP(filepath.Join(dest, "office6"))
-		dir.MkdirP("/usr/share/templates/.source")
-		dir.MkdirP("/etc/xdg/menus/applications-merged")
 
 		fileutils.Copy(filepath.Join(prefix, "opt/kingsoft/wps-office/office6"), filepath.Join(dest, "office6"))
 
