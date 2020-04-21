@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -10,10 +12,9 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
-	"time"
 
-	"github.com/cavaliercoder/grab"
 	"github.com/marguerite/util/dir"
 	"github.com/marguerite/util/fileutils"
 	"github.com/marguerite/util/slice"
@@ -58,37 +59,36 @@ func loadYAML() (wpsConfig, error) {
 }
 
 func download(src, dest string) error {
-	if _, err := os.Stat(dest); !os.IsNotExist(err) {
-		fmt.Printf("%s exists, skipped download.\n", dest)
-		return nil
-	}
+	fmt.Printf("Downloading binary data from %s (200+ mb), it may take some time.\n", src)
 
-	fmt.Printf("Downloading binary data from %s (100+ mb), it may take some time.\n", src)
+	var stdoutBuf, stderrBuf bytes.Buffer
+	cmd := exec.Command("/usr/bin/aria2c", "-c", "-x", "16", "-o", dest, src)
+	stdoutIn, _ := cmd.StdoutPipe()
+	stderrIn, _ := cmd.StderrPipe()
 
-	client := grab.NewClient()
-	req, err := grab.NewRequest(dest, src)
+	var errStdout, errStderr error
+	stdout := io.MultiWriter(os.Stdout, &stdoutBuf)
+	stderr := io.MultiWriter(os.Stderr, &stderrBuf)
+	err := cmd.Start()
 	if err != nil {
-		return err
+		return fmt.Errorf("cmd.Start() failed with '%s'", err)
 	}
-
-	resp := client.Do(req)
-	fmt.Printf("\t%v\n", resp.HTTPResponse.Status)
-
-	t := time.NewTicker(5 * time.Second)
-	defer t.Stop()
-
-	for {
-		select {
-		case <-t.C:
-			fmt.Printf("\ttransferred %d / %d bytes (%.2f%%)\n", resp.BytesComplete(), resp.Size, 100*resp.Progress())
-		case <-resp.Done:
-			if err = resp.Err(); err != nil {
-				return err
-			}
-			fmt.Printf("Download Completed. Saved to %s.\n", dest)
-			return nil
-		}
+	go func() {
+		_, errStdout = io.Copy(stdout, stdoutIn)
+	}()
+	go func() {
+		_, errStderr = io.Copy(stderr, stderrIn)
+	}()
+	err = cmd.Wait()
+	if err != nil {
+		return fmt.Errorf("cmd.Run() failed with %s", err)
 	}
+	if errStdout != nil || errStderr != nil {
+		return fmt.Errorf("failed to capture stdout or stderr")
+	}
+	outStr, errStr := string(stdoutBuf.Bytes()), string(stderrBuf.Bytes())
+	fmt.Printf("\nout:\n%s\nerr:\n%s\n", outStr, errStr)
+	return nil
 }
 
 func unpack(src, dest, cwd string) error {
@@ -150,6 +150,7 @@ func main() {
 			fmt.Println("Root privilege is required to install wps.")
 			os.Exit(1)
 		}
+
 		config, err := loadYAML()
 		if err != nil {
 			fmt.Println(err)
@@ -181,7 +182,23 @@ func main() {
 
 		dir.MkdirP(prefix)
 
-		if _, err := os.Stat(rpm); os.IsNotExist(err) {
+		fi, err := os.Stat(rpm)
+
+		resp, err1 := http.Head(config.URL + "/" + fullname + ".rpm")
+		if err1 != nil {
+			fmt.Println("Failed to establish connection to wps-office download server.")
+			os.Exit(1)
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			fmt.Printf("Expected connection status ok, got %d\n", resp.StatusCode)
+			os.Exit(1)
+		}
+
+		size, _ := strconv.Atoi(resp.Header.Get("Content-Length"))
+
+		if os.IsNotExist(err) || fi.Size() != int64(size) {
+			os.RemoveAll(rpm)
 			err = download(config.URL+"/"+fullname+".rpm", rpm)
 			if err != nil {
 				fmt.Println(err)
