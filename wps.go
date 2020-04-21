@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"sort"
 	"strings"
 	"time"
 
@@ -108,22 +107,6 @@ func unpack(src, dest, cwd string) error {
 	return nil
 }
 
-func renameWhitespace(parent string) {
-	dirs, _ := dir.Ls(parent, "dir")
-	sort.Sort(sort.Reverse(sort.StringSlice(dirs)))
-	for _, d := range dirs {
-		if strings.Contains(d, " ") {
-			os.Rename(d, filepath.Join(filepath.Dir(d), strings.Replace(filepath.Base(d), " ", "_", -1)))
-		}
-	}
-	files, _ := dir.Ls(parent)
-	for _, f := range files {
-		if strings.Contains(f, " ") {
-			os.Rename(f, filepath.Join(filepath.Dir(f), strings.Replace(filepath.Base(f), " ", "_", -1)))
-		}
-	}
-}
-
 func replaceBinaryPath(binary, path string) {
 	data, _ := ioutil.ReadFile(binary)
 	info, _ := os.Lstat(binary)
@@ -154,7 +137,7 @@ func main() {
 	var directory string
 	var dep, ghost, install bool
 	cwd, _ := os.Getwd()
-	flag.StringVar(&directory, "dir", filepath.Join(cwd, "wps-office"), "Unpacked Kingsoft WPS Office Directory.")
+	flag.StringVar(&directory, "dir", filepath.Join(cwd, "opt/kingsoft/wps-office"), "Unpacked Kingsoft WPS Office Directory.")
 	flag.BoolVar(&dep, "dep", false, "Generate runtime library dependencies.")
 	flag.BoolVar(&ghost, "ghost", false, "Generate Ghost files that'll be installed at runtime.")
 	flag.BoolVar(&install, "install", true, "Install Kingsoft WPS Office onto your openSUSE installation.")
@@ -175,7 +158,8 @@ func main() {
 
 		prefix := filepath.Join("/tmp", "wps-office_"+config.Version+"_"+config.Architecture)
 		fullname := "wps-office-" + config.Version + "." + config.Architecture
-		dest := filepath.Join(cwd, "usr/share/wps-office")
+		rpm := filepath.Join(prefix, fullname+".rpm")
+		dest := "/usr/share/wps-office"
 
 		if _, err = os.Stat(filepath.Join("/tmp", fullname+".txt")); !os.IsNotExist(err) {
 			fmt.Printf("%s has been installed on your system, stop.\n", fullname)
@@ -190,18 +174,21 @@ func main() {
 
 		dir.MkdirP(prefix)
 
-		err = download(config.URL+"/"+fullname+".rpm", filepath.Join(prefix, fullname+".rpm"))
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
-		}
-		err = unpack(filepath.Join(prefix, fullname+".rpm"), prefix, cwd)
-		if err != nil {
-			fmt.Println(err)
-			os.Exit(1)
+		if _, err := os.Stat(rpm); os.IsNotExist(err) {
+			err = download(config.URL+"/"+fullname+".rpm", rpm)
+			if err != nil {
+				fmt.Println(err)
+				os.Exit(1)
+			}
+		} else {
+			fmt.Printf("%s has already downloaded, skip downloading...\n", rpm)
 		}
 
-		renameWhitespace(prefix)
+		err = unpack(rpm, prefix, cwd)
+		if err != nil {
+			fmt.Println(err)
+			os.Exit(1)
+		}
 
 		dir.MkdirP(filepath.Join(dest, "office6"))
 		dir.MkdirP("/usr/share/templates/.source")
@@ -241,7 +228,6 @@ func main() {
 	}
 
 	office6dir := filepath.Join(directory, "/opt/kingsoft/wps-office/office6")
-	renameWhitespace(office6dir)
 
 	if dep {
 		// dep stuff
@@ -262,9 +248,20 @@ func main() {
 		// ghost stuff
 		directories, _ := dir.Ls(office6dir, "dir")
 		files, _ := dir.Ls(office6dir)
+		re := regexp.MustCompile(`[^\/]+\s+[^\/]+`)
+
+		dirs := substitute(directories, filepath.Dir(office6dir), "./usr/share/wps-office")
+
+		for _, x := range [][]string{files, directories} {
+			for i, y := range x {
+				if re.MatchString(y) {
+					x[i] = "\"" + y + "\""
+				}
+			}
+		}
+
 		ghostDirs := substitute(directories, filepath.Dir(office6dir), "%dir %{_datadir}/wps-office")
 		ghostFiles := substitute(files, filepath.Dir(office6dir), "%ghost %{_datadir}/wps-office")
-		dirs := substitute(directories, filepath.Dir(office6dir), "./usr/share/wps-office")
 
 		for _, d := range ghostDirs {
 			ghostFiles = append(ghostFiles, d)
@@ -281,8 +278,21 @@ func main() {
 
 func substitute(files []string, orig string, dest string) []string {
 	var res []string
+	var dest1 string
 	for _, f := range files {
-		res = append(res, strings.Replace(f, orig, dest, -1))
+		if strings.HasPrefix(f, "\"") {
+			if strings.HasPrefix(dest, "%dir") {
+				f = strings.TrimPrefix(f, "\"")
+				dest1 = strings.Replace(dest, "%dir %", "%dir \"%", 1)
+			}
+			if strings.HasPrefix(dest, "%ghost") {
+				f = strings.TrimPrefix(f, "\"")
+				dest1 = strings.Replace(dest, "%ghost %", "%ghost \"%", 1)
+			}
+			res = append(res, strings.Replace(f, orig, dest1, -1))
+		} else {
+			res = append(res, strings.Replace(f, orig, dest, -1))
+		}
 	}
 	return res
 }
