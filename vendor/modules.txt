@@ -1,7 +1,0 @@
-# github.com/marguerite/util v0.0.0-20200227041307-e5df39a6ecd5
-github.com/marguerite/util/dir
-github.com/marguerite/util/fileutils
-github.com/marguerite/util/slice
-github.com/marguerite/util
-# gopkg.in/yaml.v2 v2.2.8
-gopkg.in/yaml.v2
