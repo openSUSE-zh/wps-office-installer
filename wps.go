@@ -58,7 +58,7 @@ func download(src, dest string) error {
 	fmt.Printf("Downloading binary data from %s (200+ mb), it may take some time.\n", src)
 
 	var stdoutBuf, stderrBuf bytes.Buffer
-	cmd := exec.Command("/usr/bin/aria2c", "-c", "-x", "16", "-o", dest, src)
+	cmd := exec.Command("/usr/bin/aria2c", "-c", "--check-certificate=false", "-x", "16", "-o", dest, src)
 	stdoutIn, _ := cmd.StdoutPipe()
 	stderrIn, _ := cmd.StderrPipe()
 
@@ -145,7 +145,7 @@ func main() {
 	app := cli.NewApp()
 	app.Usage = "WPS Office installer for openSUSE"
 	app.Description = "Install WPS Office in your openSUSE easily."
-	app.Version = "20201020"
+	app.Version = "20210130"
 	app.Authors = []cli.Author{
 		{Name: "Marguerite Su", Email: "marguerite@opensuse.org"},
 	}
